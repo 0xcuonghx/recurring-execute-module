@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
-import { ERC7579ExecutorBase } from "modulekit/Modules.sol";
-import { IERC7579Account } from "modulekit/Accounts.sol";
-import { ModeLib } from "erc7579/lib/ModeLib.sol";
+import {ERC7579ExecutorBase} from "modulekit/Modules.sol";
+import {IERC7579Account} from "modulekit/Accounts.sol";
+import {ModeLib} from "erc7579/lib/ModeLib.sol";
 
-contract ExecutorTemplate is ERC7579ExecutorBase {
+contract RecurringExecuteModule is ERC7579ExecutorBase {
     /*//////////////////////////////////////////////////////////////////////////
                             CONSTANTS & STORAGE
     //////////////////////////////////////////////////////////////////////////*/
@@ -19,14 +19,14 @@ contract ExecutorTemplate is ERC7579ExecutorBase {
      *
      * @param data The data to initialize the module with
      */
-    function onInstall(bytes calldata data) external override { }
+    function onInstall(bytes calldata data) external override {}
 
     /**
      * De-initialize the module with the given data
      *
      * @param data The data to de-initialize the module with
      */
-    function onUninstall(bytes calldata data) external override { }
+    function onUninstall(bytes calldata data) external override {}
 
     /**
      * Check if the module is initialized
@@ -34,7 +34,7 @@ contract ExecutorTemplate is ERC7579ExecutorBase {
      *
      * @return true if the module is initialized, false otherwise
      */
-    function isInitialized(address smartAccount) external view returns (bool) { }
+    function isInitialized(address smartAccount) external view returns (bool) {}
 
     /*//////////////////////////////////////////////////////////////////////////
                                      MODULE LOGIC
@@ -53,7 +53,10 @@ contract ExecutorTemplate is ERC7579ExecutorBase {
      * @param data The data to execute
      */
     function execute(bytes calldata data) external {
-        IERC7579Account(msg.sender).executeFromExecutor(ModeLib.encodeSimpleSingle(), data);
+        IERC7579Account(msg.sender).executeFromExecutor(
+            ModeLib.encodeSimpleSingle(),
+            data
+        );
     }
 
     /*//////////////////////////////////////////////////////////////////////////
@@ -70,7 +73,7 @@ contract ExecutorTemplate is ERC7579ExecutorBase {
      * @return name The name of the module
      */
     function name() external pure returns (string memory) {
-        return "ExecutorTemplate";
+        return "RecurringExecuteModule";
     }
 
     /**
@@ -89,7 +92,9 @@ contract ExecutorTemplate is ERC7579ExecutorBase {
      *
      * @return true if the module is of the given type, false otherwise
      */
-    function isModuleType(uint256 typeID) external pure override returns (bool) {
+    function isModuleType(
+        uint256 typeID
+    ) external pure override returns (bool) {
         return typeID == TYPE_EXECUTOR;
     }
 }

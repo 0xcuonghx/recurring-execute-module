@@ -1,34 +1,29 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
-import { Test } from "forge-std/Test.sol";
-import {
-    RhinestoneModuleKit,
-    ModuleKitHelpers,
-    ModuleKitUserOp,
-    AccountInstance
-} from "modulekit/ModuleKit.sol";
-import { MODULE_TYPE_EXECUTOR } from "modulekit/external/ERC7579.sol";
-import { ExecutionLib } from "erc7579/lib/ExecutionLib.sol";
-import { ExecutorTemplate } from "src/ExecutorTemplate.sol";
+import {Test} from "forge-std/Test.sol";
+import {RhinestoneModuleKit, ModuleKitHelpers, ModuleKitUserOp, AccountInstance} from "modulekit/ModuleKit.sol";
+import {MODULE_TYPE_EXECUTOR} from "modulekit/external/ERC7579.sol";
+import {ExecutionLib} from "erc7579/lib/ExecutionLib.sol";
+import {RecurringExecuteModule} from "src/RecurringExecuteModule.sol";
 
-contract ExecutorTemplateTest is RhinestoneModuleKit, Test {
+contract RecurringExecuteModuleTest is RhinestoneModuleKit, Test {
     using ModuleKitHelpers for *;
     using ModuleKitUserOp for *;
 
     // account and modules
     AccountInstance internal instance;
-    ExecutorTemplate internal executor;
+    RecurringExecuteModule internal executor;
 
     function setUp() public {
         init();
 
         // Create the executor
-        executor = new ExecutorTemplate();
-        vm.label(address(executor), "ExecutorTemplate");
+        executor = new RecurringExecuteModule();
+        vm.label(address(executor), "RecurringExecuteModule");
 
         // Create the account and install the executor
-        instance = makeAccountInstance("ExecutorTemplate");
+        instance = makeAccountInstance("RecurringExecuteModule");
         vm.deal(address(instance.account), 10 ether);
         instance.installModule({
             moduleTypeId: MODULE_TYPE_EXECUTOR,
@@ -53,7 +48,10 @@ contract ExecutorTemplateTest is RhinestoneModuleKit, Test {
         instance.exec({
             target: address(executor),
             value: 0,
-            callData: abi.encodeWithSelector(ExecutorTemplate.execute.selector, callData)
+            callData: abi.encodeWithSelector(
+                RecurringExecuteModule.execute.selector,
+                callData
+            )
         });
 
         // Check if the balance of the target has increased
