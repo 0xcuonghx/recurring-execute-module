@@ -155,6 +155,10 @@ contract RecurringExecuteModule is ERC7579ExecutorBase {
         );
 
         _execute(address(this), executionData.value, "");
+        emit RecurringExecutionTriggered(
+            smartAccount,
+            executionData.lastExecutionTimestamp
+        );
     }
 
     function recurringExecutionOf(
@@ -207,10 +211,21 @@ contract RecurringExecuteModule is ERC7579ExecutorBase {
             executionHourEnd: executionHourEnd,
             lastExecutionTimestamp: 0
         });
+
+        emit RecurringExecutionAdded(
+            msg.sender,
+            basis,
+            receiver,
+            value,
+            executionDay,
+            executionHourStart,
+            executionHourEnd
+        );
     }
 
     function _removeRecurringExecution() internal {
         delete _recurringExecutions[msg.sender];
+        emit RecurringExecutionRemoved(msg.sender);
     }
 
     function _isValidDaily(
