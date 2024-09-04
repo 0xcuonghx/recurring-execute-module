@@ -4,11 +4,57 @@ pragma solidity ^0.8.23;
 import {ERC7579ExecutorBase} from "modulekit/Modules.sol";
 import {IERC7579Account} from "modulekit/Accounts.sol";
 import {ModeLib} from "erc7579/lib/ModeLib.sol";
+import {BokkyPooBahsDateTimeLibrary} from "./libs/BokkyPooBahsDateTimeLibrary.sol";
 
 contract RecurringExecuteModule is ERC7579ExecutorBase {
+    using BokkyPooBahsDateTimeLibrary for *;
+
     /*//////////////////////////////////////////////////////////////////////////
                             CONSTANTS & STORAGE
     //////////////////////////////////////////////////////////////////////////*/
+
+    event RecurringExecutionAdded(
+        address indexed smartAccount,
+        ExecutionBasis basis,
+        address receiver,
+        uint256 value,
+        uint8 executionDay,
+        uint8 executionHourStart,
+        uint8 executionHourEnd
+    );
+    event RecurringExecutionRemoved(address indexed smartAccount);
+    event RecurringExecutionTriggered(
+        address indexed smartAccount,
+        uint256 lastExecutionTimestamp
+    );
+
+    error InvalidExecutionDay();
+    error InvalidExecutionHour();
+    error InvalidAddress();
+    error InvalidValue();
+    error InvalidDailyExecution();
+    error InvalidWeeklyExecution();
+    error InvalidMonthlyExecution();
+    error NoRecurringExecution();
+
+    enum ExecutionBasis {
+        Daily,
+        Weekly,
+        Monthly
+    }
+
+    struct RecurringExecution {
+        ExecutionBasis basis;
+        address receiver;
+        uint256 value;
+        uint8 executionDay;
+        uint8 executionHourStart;
+        uint8 executionHourEnd;
+        uint32 lastExecutionTimestamp;
+    }
+
+    mapping(address smartAccount => RecurringExecution)
+        private _recurringExecutions;
 
     /*//////////////////////////////////////////////////////////////////////////
                                      CONFIG
@@ -19,14 +65,37 @@ contract RecurringExecuteModule is ERC7579ExecutorBase {
      *
      * @param data The data to initialize the module with
      */
-    function onInstall(bytes calldata data) external override {}
+    function onInstall(bytes calldata data) external override {
+        (
+            ExecutionBasis basis,
+            address receiver,
+            uint256 value,
+            uint8 executionDay,
+            uint8 executionHourStart,
+            uint8 executionHourEnd
+        ) = abi.decode(
+                data,
+                (ExecutionBasis, address, uint256, uint8, uint8, uint8)
+            );
+
+        _addRecurringExecution(
+            basis,
+            receiver,
+            value,
+            executionDay,
+            executionHourStart,
+            executionHourEnd
+        );
+    }
 
     /**
      * De-initialize the module with the given data
      *
      * @param data The data to de-initialize the module with
      */
-    function onUninstall(bytes calldata data) external override {}
+    function onUninstall(bytes calldata data) external override {
+        _removeRecurringExecution();
+    }
 
     /**
      * Check if the module is initialized
@@ -34,7 +103,9 @@ contract RecurringExecuteModule is ERC7579ExecutorBase {
      *
      * @return true if the module is initialized, false otherwise
      */
-    function isInitialized(address smartAccount) external view returns (bool) {}
+    function isInitialized(address smartAccount) external view returns (bool) {
+        return _recurringExecutions[smartAccount].receiver != address(0);
+    }
 
     /*//////////////////////////////////////////////////////////////////////////
                                      MODULE LOGIC
@@ -50,18 +121,184 @@ contract RecurringExecuteModule is ERC7579ExecutorBase {
      * @dev This is an example function that can be used to execute arbitrary data
      * @dev This function is not part of the ERC-7579 standard
      *
-     * @param data The data to execute
+     * @param smartAccount The smart account address
      */
-    function execute(bytes calldata data) external {
-        IERC7579Account(msg.sender).executeFromExecutor(
-            ModeLib.encodeSimpleSingle(),
-            data
+    function execute(address smartAccount) external {
+        if (smartAccount == address(0)) {
+            revert InvalidAddress();
+        }
+        RecurringExecution memory executionData = _recurringExecutions[
+            smartAccount
+        ];
+        if (executionData.executionHourStart == 0) {
+            revert NoRecurringExecution();
+        }
+        if (
+            executionData.basis == ExecutionBasis.Daily &&
+            !_isValidDaily(executionData)
+        ) {
+            revert InvalidDailyExecution();
+        } else if (
+            executionData.basis == ExecutionBasis.Weekly &&
+            !_isValidWeekly(executionData)
+        ) {
+            revert InvalidWeeklyExecution();
+        } else if (
+            executionData.basis == ExecutionBasis.Monthly &&
+            !_isValidMonthly(executionData)
+        ) {
+            revert InvalidMonthlyExecution();
+        }
+
+        _recurringExecutions[smartAccount].lastExecutionTimestamp = uint32(
+            block.timestamp
         );
+
+        _execute(address(this), executionData.value, "");
+    }
+
+    function recurringExecutionOf(
+        address smartAccount
+    ) public view returns (RecurringExecution memory) {
+        return _recurringExecutions[smartAccount];
     }
 
     /*//////////////////////////////////////////////////////////////////////////
                                      INTERNAL
     //////////////////////////////////////////////////////////////////////////*/
+    function _addRecurringExecution(
+        ExecutionBasis basis,
+        address receiver,
+        uint256 value,
+        uint8 executionDay,
+        uint8 executionHourStart,
+        uint8 executionHourEnd
+    ) internal {
+        if (value == 0) {
+            revert InvalidValue();
+        }
+
+        if (receiver == address(0)) {
+            revert InvalidAddress();
+        }
+
+        if (executionDay == 0) {
+            revert InvalidExecutionDay();
+        } else if (basis == ExecutionBasis.Monthly && executionDay >= 29) {
+            revert InvalidExecutionDay();
+        } else if (basis == ExecutionBasis.Weekly && executionDay >= 8) {
+            revert InvalidExecutionDay();
+        }
+
+        if (
+            executionHourStart == 0 ||
+            executionHourEnd >= 23 ||
+            executionHourStart >= executionHourEnd
+        ) {
+            revert InvalidExecutionHour();
+        }
+
+        _recurringExecutions[msg.sender] = RecurringExecution({
+            basis: basis,
+            receiver: receiver,
+            value: value,
+            executionDay: executionDay,
+            executionHourStart: executionHourStart,
+            executionHourEnd: executionHourEnd,
+            lastExecutionTimestamp: 0
+        });
+    }
+
+    function _removeRecurringExecution() internal {
+        delete _recurringExecutions[msg.sender];
+    }
+
+    function _isValidDaily(
+        RecurringExecution memory executionData
+    ) internal view returns (bool) {
+        return
+            _isPastDay(executionData.lastExecutionTimestamp) &&
+            _isBetweenHours(
+                executionData.executionHourStart,
+                executionData.executionHourEnd
+            );
+    }
+
+    function _isValidWeekly(
+        RecurringExecution memory executionData
+    ) internal view returns (bool) {
+        return
+            _isPastWeek(executionData.lastExecutionTimestamp) &&
+            _isOnDayOfWeekAndBetweenHours(
+                executionData.executionDay,
+                executionData.executionHourStart,
+                executionData.executionHourEnd
+            );
+    }
+
+    function _isValidMonthly(
+        RecurringExecution memory executionData
+    ) internal view returns (bool) {
+        return
+            _isPastMonth(executionData.lastExecutionTimestamp) &&
+            _isOnDayAndBetweenHours(
+                executionData.executionDay,
+                executionData.executionHourStart,
+                executionData.executionHourEnd
+            );
+    }
+
+    function _isOnDayAndBetweenHours(
+        uint8 day,
+        uint8 hourStart,
+        uint8 hourEnd
+    ) internal view returns (bool) {
+        return
+            block.timestamp.getDay() == day &&
+            block.timestamp.getHour() >= hourStart &&
+            block.timestamp.getHour() < hourEnd;
+    }
+
+    function _isOnDayOfWeekAndBetweenHours(
+        uint8 day,
+        uint8 hourStart,
+        uint8 hourEnd
+    ) internal view returns (bool) {
+        return
+            block.timestamp.getDayOfWeek() == day &&
+            block.timestamp.getHour() >= hourStart &&
+            block.timestamp.getHour() < hourEnd;
+    }
+
+    function _isBetweenHours(
+        uint8 hourStart,
+        uint8 hourEnd
+    ) internal view returns (bool) {
+        return
+            block.timestamp.getHour() >= hourStart &&
+            block.timestamp.getHour() < hourEnd;
+    }
+
+    function _isPastMonth(uint256 previousTime) internal view returns (bool) {
+        return
+            block.timestamp.getYear() > previousTime.getYear() ||
+            block.timestamp.getMonth() > previousTime.getMonth();
+    }
+
+    function _isPastDay(uint256 previousTime) internal view returns (bool) {
+        return
+            block.timestamp.getYear() > previousTime.getYear() ||
+            block.timestamp.getMonth() > previousTime.getMonth() ||
+            block.timestamp.getDay() > previousTime.getDay();
+    }
+
+    function _isPastWeek(uint256 previousTime) internal view returns (bool) {
+        return
+            block.timestamp.getYear() > previousTime.getYear() ||
+            block.timestamp.getMonth() > previousTime.getMonth() ||
+            (block.timestamp.getDay() - 1) / 7 >
+            (previousTime.getDay() - 1) / 7;
+    }
 
     /*//////////////////////////////////////////////////////////////////////////
                                      METADATA
