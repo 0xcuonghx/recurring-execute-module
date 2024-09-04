@@ -23,10 +23,7 @@ contract RecurringExecuteModule is ERC7579ExecutorBase {
         uint8 executionHourEnd
     );
     event RecurringExecutionRemoved(address indexed smartAccount);
-    event RecurringExecutionTriggered(
-        address indexed smartAccount,
-        uint256 lastExecutionTimestamp
-    );
+    event RecurringExecutionTriggered(address indexed smartAccount);
 
     error InvalidExecutionDay();
     error InvalidExecutionHour();
@@ -155,10 +152,7 @@ contract RecurringExecuteModule is ERC7579ExecutorBase {
         );
 
         _execute(address(this), executionData.value, "");
-        emit RecurringExecutionTriggered(
-            smartAccount,
-            executionData.lastExecutionTimestamp
-        );
+        emit RecurringExecutionTriggered(smartAccount);
     }
 
     function recurringExecutionOf(
