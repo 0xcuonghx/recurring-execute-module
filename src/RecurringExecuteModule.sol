@@ -88,9 +88,8 @@ contract RecurringExecuteModule is ERC7579ExecutorBase {
     /**
      * De-initialize the module with the given data
      *
-     * @param data The data to de-initialize the module with
      */
-    function onUninstall(bytes calldata data) external override {
+    function onUninstall(bytes calldata) external override {
         _removeRecurringExecution();
     }
 
@@ -127,6 +126,7 @@ contract RecurringExecuteModule is ERC7579ExecutorBase {
         RecurringExecution memory executionData = _recurringExecutions[
             smartAccount
         ];
+
         if (executionData.executionHourStart == 0) {
             revert NoRecurringExecution();
         }
@@ -151,7 +151,14 @@ contract RecurringExecuteModule is ERC7579ExecutorBase {
             block.timestamp
         );
 
-        _execute(address(this), executionData.value, "");
+        IERC7579Account(smartAccount).executeFromExecutor(
+            ModeLib.encodeSimpleSingle(),
+            abi.encodePacked(
+                executionData.receiver,
+                executionData.value,
+                bytes("")
+            )
+        );
         emit RecurringExecutionTriggered(smartAccount);
     }
 
