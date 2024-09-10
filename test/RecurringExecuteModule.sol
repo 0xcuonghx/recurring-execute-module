@@ -43,7 +43,7 @@ contract RecurringExecuteModuleTest is RhinestoneModuleKit, Test {
                 1 ether,
                 uint8(1),
                 uint8(1),
-                uint(22)
+                uint8(22)
             )
         });
     }
