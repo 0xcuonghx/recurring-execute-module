@@ -5,9 +5,12 @@ import {ERC7579ExecutorBase} from "modulekit/Modules.sol";
 import {IERC7579Account} from "modulekit/Accounts.sol";
 import {ModeLib} from "erc7579/lib/ModeLib.sol";
 import {BokkyPooBahsDateTimeLibrary} from "./libs/BokkyPooBahsDateTimeLibrary.sol";
+import {IERC20} from "forge-std/interfaces/IERC20.sol";
+import {ERC20Integration} from "modulekit/Integrations.sol";
 
 contract RecurringExecuteModule is ERC7579ExecutorBase {
     using BokkyPooBahsDateTimeLibrary for *;
+    using ERC20Integration for IERC20;
 
     /*//////////////////////////////////////////////////////////////////////////
                             CONSTANTS & STORAGE
@@ -17,7 +20,8 @@ contract RecurringExecuteModule is ERC7579ExecutorBase {
         address indexed smartAccount,
         ExecutionBasis basis,
         address receiver,
-        uint256 value,
+        address token,
+        uint256 amount,
         uint8 executionDay,
         uint8 executionHourStart,
         uint8 executionHourEnd
@@ -28,7 +32,7 @@ contract RecurringExecuteModule is ERC7579ExecutorBase {
     error InvalidExecutionDay();
     error InvalidExecutionHour();
     error InvalidAddress();
-    error InvalidValue();
+    error InvalidAmount();
     error InvalidDailyExecution();
     error InvalidWeeklyExecution();
     error InvalidMonthlyExecution();
@@ -43,7 +47,8 @@ contract RecurringExecuteModule is ERC7579ExecutorBase {
     struct RecurringExecution {
         ExecutionBasis basis;
         address receiver;
-        uint256 value;
+        address token;
+        uint256 amount;
         uint8 executionDay;
         uint8 executionHourStart;
         uint8 executionHourEnd;
@@ -66,19 +71,21 @@ contract RecurringExecuteModule is ERC7579ExecutorBase {
         (
             ExecutionBasis basis,
             address receiver,
-            uint256 value,
+            address token,
+            uint256 amount,
             uint8 executionDay,
             uint8 executionHourStart,
             uint8 executionHourEnd
         ) = abi.decode(
                 data,
-                (ExecutionBasis, address, uint256, uint8, uint8, uint8)
+                (ExecutionBasis, address, address, uint256, uint8, uint8, uint8)
             );
 
         _addRecurringExecution(
             basis,
             receiver,
-            value,
+            token,
+            amount,
             executionDay,
             executionHourStart,
             executionHourEnd
@@ -151,14 +158,12 @@ contract RecurringExecuteModule is ERC7579ExecutorBase {
             block.timestamp
         );
 
-        IERC7579Account(smartAccount).executeFromExecutor(
-            ModeLib.encodeSimpleSingle(),
-            abi.encodePacked(
-                executionData.receiver,
-                executionData.value,
-                bytes("")
-            )
-        );
+        IERC20(executionData.token).safeTransfer({
+            account: smartAccount,
+            to: executionData.receiver,
+            amount: executionData.amount
+        });
+
         emit RecurringExecutionTriggered(smartAccount);
     }
 
@@ -174,13 +179,14 @@ contract RecurringExecuteModule is ERC7579ExecutorBase {
     function _addRecurringExecution(
         ExecutionBasis basis,
         address receiver,
-        uint256 value,
+        address token,
+        uint256 amount,
         uint8 executionDay,
         uint8 executionHourStart,
         uint8 executionHourEnd
     ) internal {
-        if (value == 0) {
-            revert InvalidValue();
+        if (amount == 0) {
+            revert InvalidAmount();
         }
 
         if (receiver == address(0)) {
@@ -206,7 +212,8 @@ contract RecurringExecuteModule is ERC7579ExecutorBase {
         _recurringExecutions[msg.sender] = RecurringExecution({
             basis: basis,
             receiver: receiver,
-            value: value,
+            token: token,
+            amount: amount,
             executionDay: executionDay,
             executionHourStart: executionHourStart,
             executionHourEnd: executionHourEnd,
@@ -217,7 +224,8 @@ contract RecurringExecuteModule is ERC7579ExecutorBase {
             msg.sender,
             basis,
             receiver,
-            value,
+            token,
+            amount,
             executionDay,
             executionHourStart,
             executionHourEnd
